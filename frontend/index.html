@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<title>AI/ML NSE Stock Screener</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+
+    margin: 0;
+
+    padding: 20px;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    background:
+        #0f172a;
+
+    color:
+        #e2e8f0;
+}
+
+h1 {
+
+    margin:
+        0 0 8px;
+
+    color:
+        #38bdf8;
+}
+
+#status {
+
+    margin-bottom:
+        15px;
+
+    color:
+        #22c55e;
+
+    font-weight:
+        bold;
+}
+
+.summary {
+
+    display:
+        flex;
+
+    gap:
+        15px;
+
+    flex-wrap:
+        wrap;
+
+    margin-bottom:
+        15px;
+}
+
+.card {
+
+    background:
+        #1e293b;
+
+    padding:
+        12px 18px;
+
+    border-radius:
+        8px;
+}
+
+.table-container {
+
+    width:
+        100%;
+
+    overflow:
+        auto;
+
+    background:
+        #111827;
+
+    border-radius:
+        10px;
+}
+
+table {
+
+    width:
+        100%;
+
+    border-collapse:
+        collapse;
+
+    min-width:
+        1700px;
+}
+
+th {
+
+    position:
+        sticky;
+
+    top:
+        0;
+
+    background:
+        #1e293b;
+
+    color:
+        #38bdf8;
+
+    padding:
+        10px;
+
+    text-align:
+        left;
+
+    white-space:
+        nowrap;
+}
+
+td {
+
+    padding:
+        9px 10px;
+
+    border-bottom:
+        1px solid #334155;
+
+    white-space:
+        nowrap;
+}
+
+tr:hover {
+
+    background:
+        #1e293b;
+}
+
+.buy,
+.accept {
+
+    color:
+        #22c55e;
+
+    font-weight:
+        bold;
+}
+
+.sell,
+.avoid {
+
+    color:
+        #ef4444;
+
+    font-weight:
+        bold;
+}
+
+.waiting,
+.not-ready {
+
+    color:
+        #f59e0b;
+
+    font-weight:
+        bold;
+}
+
+.probability {
+
+    font-weight:
+        bold;
+}
+
+.good {
+
+    color:
+        #22c55e;
+}
+
+.bad {
+
+    color:
+        #ef4444;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>
+AI/ML NSE Stock Screener
+</h1>
+
+<div id="status">
+WebSocket connecting...
+</div>
+
+<div class="summary">
+
+    <div class="card">
+        Stocks:
+        <strong id="stockCount">0</strong>
+    </div>
+
+    <div class="card">
+        BUY:
+        <strong id="buyCount">0</strong>
+    </div>
+
+    <div class="card">
+        SELL:
+        <strong id="sellCount">0</strong>
+    </div>
+
+    <div class="card">
+        ACCEPT:
+        <strong id="acceptCount">0</strong>
+    </div>
+
+    <div class="card">
+        AVOID:
+        <strong id="avoidCount">0</strong>
+    </div>
+
+</div>
+
+<div class="table-container">
+
+<table>
+
+<thead>
+
+<tr>
+
+<th>Symbol</th>
+<th>LTP</th>
+<th>LTQ</th>
+
+<th>Bid Price</th>
+<th>Bid Qty</th>
+
+<th>Ask Price</th>
+<th>Ask Qty</th>
+
+<th>SMMA 20</th>
+<th>SMMA 120</th>
+
+<th>ETQ 5m</th>
+<th>ETQ 20m</th>
+<th>ETQ 60m</th>
+
+<th>Avg LTP 20m</th>
+<th>Avg LTP 60m</th>
+
+<th>Crossover</th>
+<th>Decision</th>
+<th>Probability</th>
+<th>Reason</th>
+
+</tr>
+
+</thead>
+
+<tbody id="stockTable"></tbody>
+
+</table>
+
+</div>
+
+<script>
+
+const stockTable =
+    document.getElementById(
+        "stockTable"
+    );
+
+const status =
+    document.getElementById(
+        "status"
+    );
+
+const stockCount =
+    document.getElementById(
+        "stockCount"
+    );
+
+const buyCount =
+    document.getElementById(
+        "buyCount"
+    );
+
+const sellCount =
+    document.getElementById(
+        "sellCount"
+    );
+
+const acceptCount =
+    document.getElementById(
+        "acceptCount"
+    );
+
+const avoidCount =
+    document.getElementById(
+        "avoidCount"
+    );
+
+const rows = {};
+
+function escapeHtml(value) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+        return "";
+    }
+
+    return String(value)
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+}
+
+function number(
+    value,
+    digits = 2
+) {
+
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+        return "-";
+    }
+
+    const n =
+        Number(value);
+
+    if (
+        Number.isNaN(n)
+    ) {
+        return "-";
+    }
+
+    return n.toFixed(digits);
+}
+
+function integer(value) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+        return "-";
+    }
+
+    const n =
+        Number(value);
+
+    if (
+        Number.isNaN(n)
+    ) {
+        return "-";
+    }
+
+    return Math.round(n)
+        .toLocaleString("en-IN");
+}
+
+function probability(value) {
+
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+        return "-";
+    }
+
+    const n =
+        Number(value);
+
+    if (
+        Number.isNaN(n)
+    ) {
+        return "-";
+    }
+
+    return (
+        n * 100
+    ).toFixed(2) + "%";
+}
+
+function crossoverClass(value) {
+
+    if (
+        value === "BUY"
+    ) {
+        return "buy";
+    }
+
+    if (
+        value === "SELL"
+    ) {
+        return "sell";
+    }
+
+    return "waiting";
+}
+
+function decisionClass(value) {
+
+    if (
+        value === "ACCEPT"
+    ) {
+        return "accept";
+    }
+
+    if (
+        value === "AVOID"
+    ) {
+        return "avoid";
+    }
+
+    return "not-ready";
+}
+
+function updateSummary() {
+
+    stockCount.textContent =
+        Object.keys(rows).length;
+
+    let buys = 0;
+    let sells = 0;
+    let accepts = 0;
+    let avoids = 0;
+
+    Object.values(rows)
+        .forEach(
+            row => {
+
+                const cells =
+                    row.querySelectorAll(
+                        "td"
+                    );
+
+                if (!cells.length) {
+                    return;
+                }
+
+                const crossover =
+                    cells[14]
+                    .textContent
+                    .trim();
+
+                const decision =
+                    cells[15]
+                    .textContent
+                    .trim();
+
+                if (
+                    crossover === "BUY"
+                ) {
+                    buys++;
+                }
+
+                if (
+                    crossover === "SELL"
+                ) {
+                    sells++;
+                }
+
+                if (
+                    decision === "ACCEPT"
+                ) {
+                    accepts++;
+                }
+
+                if (
+                    decision === "AVOID"
+                ) {
+                    avoids++;
+                }
+            }
+        );
+
+    buyCount.textContent =
+        buys;
+
+    sellCount.textContent =
+        sells;
+
+    acceptCount.textContent =
+        accepts;
+
+    avoidCount.textContent =
+        avoids;
+}
+
+function updateRow(data) {
+
+    if (
+        !data ||
+        !data.symbol
+    ) {
+        return;
+    }
+
+    const symbol =
+        String(data.symbol);
+
+    let row =
+        rows[symbol];
+
+    if (!row) {
+
+        row =
+            document.createElement(
+                "tr"
+            );
+
+        rows[symbol] =
+            row;
+
+        stockTable.appendChild(
+            row
+        );
+    }
+
+    const crossover =
+        data.crossover || "-";
+
+    const decision =
+        data.decision || "-";
+
+    row.innerHTML = `
+
+        <td>
+            ${escapeHtml(symbol)}
+        </td>
+
+        <td>
+            ${number(data.ltp)}
+        </td>
+
+        <td>
+            ${integer(data.ltq)}
+        </td>
+
+        <td>
+            ${number(data.bid_price)}
+        </td>
+
+        <td>
+            ${integer(data.bid_qty)}
+        </td>
+
+        <td>
+            ${number(data.ask_price)}
+        </td>
+
+        <td>
+            ${integer(data.ask_qty)}
+        </td>
+
+        <td>
+            ${number(data.smma20)}
+        </td>
+
+        <td>
+            ${number(data.smma120)}
+        </td>
+
+        <td>
+            ${integer(data.etq_5m)}
+        </td>
+
+        <td>
+            ${integer(data.etq_20m)}
+        </td>
+
+        <td>
+            ${integer(data.etq_60m)}
+        </td>
+
+        <td>
+            ${number(data.avg_ltp_20m)}
+        </td>
+
+        <td>
+            ${number(data.avg_ltp_60m)}
+        </td>
+
+        <td class="${crossoverClass(crossover)}">
+            ${escapeHtml(crossover)}
+        </td>
+
+        <td class="${decisionClass(decision)}">
+            ${escapeHtml(decision)}
+        </td>
+
+        <td class="probability">
+            ${escapeHtml(
+                probability(
+                    data.probability
+                )
+            )}
+        </td>
+
+        <td>
+            ${escapeHtml(
+                data.reason || "-"
+            )}
+        </td>
+    `;
+
+    updateSummary();
+}
+
+function connectWebSocket() {
+
+    const protocol =
+        window.location.protocol ===
+        "https:"
+            ? "wss:"
+            : "ws:";
+
+    const wsUrl =
+        protocol +
+        "//" +
+        window.location.host +
+        "/ws";
+
+    const socket =
+        new WebSocket(
+            wsUrl
+        );
+
+    socket.onopen =
+        function() {
+
+            status.textContent =
+                "WebSocket connected";
+
+            status.style.color =
+                "#22c55e";
+        };
+
+    socket.onmessage =
+        function(event) {
+
+            try {
+
+                const data =
+                    JSON.parse(
+                        event.data
+                    );
+
+                updateRow(data);
+
+            }
+            catch(error) {
+
+                console.error(
+                    "Invalid WebSocket data:",
+                    error
+                );
+            }
+        };
+
+    socket.onerror =
+        function() {
+
+            status.textContent =
+                "WebSocket error";
+
+            status.style.color =
+                "#ef4444";
+        };
+
+    socket.onclose =
+        function() {
+
+            status.textContent =
+                "WebSocket disconnected - reconnecting...";
+
+            status.style.color =
+                "#f59e0b";
+
+            setTimeout(
+                connectWebSocket,
+                3000
+            );
+        };
+}
+
+connectWebSocket();
+
+</script>
+
+</body>
+
+</html>

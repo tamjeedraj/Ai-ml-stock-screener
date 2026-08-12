@@ -1,0 +1,26 @@
+services:
+
+  - type: web
+
+    name: ai-ml-nse-screener
+
+    env: docker
+
+    healthCheckPath: /health
+
+    envVars:
+
+      - key: ANGEL_API_KEY
+        sync: false
+
+      - key: ANGEL_CLIENT_CODE
+        sync: false
+
+      - key: ANGEL_PASSWORD
+        sync: false
+
+      - key: ANGEL_TOTP
+        sync: false
+
+      - key: APP_ENV
+        value: production
